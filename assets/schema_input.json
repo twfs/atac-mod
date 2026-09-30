@@ -13,9 +13,17 @@
                 "errorMessage": "Sample name must be provided and cannot contain spaces"
             },
             "fastq_1": {
-                "type": "string",
-                "pattern": "^\\S+\\.f(ast)?q\\.gz$",
-                "errorMessage": "FastQ file for reads 1 must be provided, cannot contain spaces and must have extension '.fq.gz' or '.fastq.gz'"
+                "errorMessage": "FastQ file for reads 1 cannot contain spaces and must have extension '.fq.gz' or '.fastq.gz'. Leave empty when the row provides a 'bam' instead.",
+                "anyOf": [
+                    {
+                        "type": "string",
+                        "pattern": "^\\S+\\.f(ast)?q\\.gz$"
+                    },
+                    {
+                        "type": "string",
+                        "maxLength": 0
+                    }
+                ]
             },
             "fastq_2": {
                 "errorMessage": "FastQ file for reads 2 cannot contain spaces and must have extension '.fq.gz' or '.fastq.gz'",
@@ -35,6 +43,19 @@
                 "pattern": "^[1-9][0-9]*$",
                 "errorMessage": "Integer representing replicate number. Must start from 1..<number of replicates>."
             },
+            "bam": {
+                "errorMessage": "BAM file cannot contain spaces and must have extension '.bam'",
+                "anyOf": [
+                    {
+                        "type": "string",
+                        "pattern": "^\\S+\\.bam$"
+                    },
+                    {
+                        "type": "string",
+                        "maxLength": 0
+                    }
+                ]
+            },
             "control": {
                 "type": "string",
                 "pattern": "^\\S+$",
@@ -46,6 +67,21 @@
                 "errorMessage": "Integer representing control's replicate number."
             }
         },
-        "required": ["sample", "fastq_1", "replicate"]
+        "required": [
+            "sample",
+            "replicate"
+        ],
+        "anyOf": [
+            {
+                "required": [
+                    "fastq_1"
+                ]
+            },
+            {
+                "required": [
+                    "bam"
+                ]
+            }
+        ]
     }
 }

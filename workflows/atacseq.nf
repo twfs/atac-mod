@@ -19,6 +19,9 @@ WorkflowAtacseq.initialise(params, log)
 // Check mandatory parameters
 ch_input = file(params.input)
 
+// Does any sample start from FastQ? If every row provides a BAM, no aligner index is needed.
+def has_fastq_input = ch_input.splitCsv(header: true).any { row -> row.fastq_1?.trim() }
+
 // Check ataqv_mito_reference parameter
 ataqv_mito_reference = params.ataqv_mito_reference
 if (!params.ataqv_mito_reference && params.mito_name) {
@@ -61,6 +64,7 @@ ch_multiqc_merged_replicate_deseq2_clustering_header = file("$projectDir/assets/
 */
 
 include { IGV     } from '../modules/local/igv'
+include { BAM_INPUT_CHECK } from '../modules/local/bam_input_check'
 include { MULTIQC } from '../modules/local/multiqc'
 
 //
@@ -107,6 +111,7 @@ include { FASTQ_ALIGN_BOWTIE2              } from '../subworkflows/nf-core/fastq
 include { FASTQ_ALIGN_CHROMAP              } from '../subworkflows/nf-core/fastq_align_chromap/main'
 
 include { BAM_MARKDUPLICATES_PICARD as MERGED_LIBRARY_MARKDUPLICATES_PICARD   } from '../subworkflows/nf-core/bam_markduplicates_picard/main'
+include { BAM_SORT_STATS_SAMTOOLS   as INPUT_BAM_SORT_STATS_SAMTOOLS           } from '../subworkflows/nf-core/bam_sort_stats_samtools/main'
 include { BAM_MARKDUPLICATES_PICARD as MERGED_REPLICATE_MARKDUPLICATES_PICARD } from '../subworkflows/nf-core/bam_markduplicates_picard/main'
 
 /*
@@ -126,7 +131,7 @@ workflow ATACSEQ {
     // SUBWORKFLOW: Uncompress and prepare reference genome files
     //
     PREPARE_GENOME (
-        params.aligner
+        has_fastq_input ? params.aligner : ''
     )
     ch_versions = ch_versions.mix(PREPARE_GENOME.out.versions)
 
@@ -252,19 +257,57 @@ workflow ATACSEQ {
         ch_versions = ch_versions.mix(ALIGN_STAR.out.versions)
     }
 
+    //
+    // MODULE: Samples that start from an existing BAM - check it was aligned to this genome
+    //         and detect single-end / paired-end from its reads
+    //
+    BAM_INPUT_CHECK (
+        INPUT_CHECK.out.bams,
+        PREPARE_GENOME.out.fai
+    )
+    ch_versions = ch_versions.mix(BAM_INPUT_CHECK.out.versions.first())
+
+    //
+    // SUBWORKFLOW: Coordinate-sort, index and run samtools stats on input BAMs, so they
+    //              enter the pipeline in the same state as freshly aligned BAMs
+    //
+    INPUT_BAM_SORT_STATS_SAMTOOLS (
+        BAM_INPUT_CHECK
+            .out
+            .bam
+            .map {
+                meta, bam, single_end ->
+                    [ meta + [ single_end: single_end.trim().toBoolean() ], bam ]
+            },
+        PREPARE_GENOME.out.fasta
+            .map {
+                [ [:], it ]
+            }
+    )
+    ch_genome_bam        = ch_genome_bam.mix(INPUT_BAM_SORT_STATS_SAMTOOLS.out.bam)
+    ch_samtools_stats    = ch_samtools_stats.mix(INPUT_BAM_SORT_STATS_SAMTOOLS.out.stats)
+    ch_samtools_flagstat = ch_samtools_flagstat.mix(INPUT_BAM_SORT_STATS_SAMTOOLS.out.flagstat)
+    ch_samtools_idxstats = ch_samtools_idxstats.mix(INPUT_BAM_SORT_STATS_SAMTOOLS.out.idxstats)
+    ch_versions = ch_versions.mix(INPUT_BAM_SORT_STATS_SAMTOOLS.out.versions)
+
     // Create channels: [ meta, [bam] ]
+    // Runs from FastQ and from BAM are merged per sample/replicate; they must agree on single-end / paired-end
     ch_genome_bam
         .map {
             meta, bam ->
                 def meta_clone = meta.clone()
                 meta_clone.remove('read_group')
                 meta_clone.id = meta_clone.id - ~/_T\d+$/
-                [ meta_clone, bam ]
+                [ meta_clone.id, meta_clone, bam ]
         }
         .groupTuple(by: [0])
         .map {
-            meta, bam ->
-                [ meta, bam.flatten() ]
+            id, metas, bam ->
+                def uniq_metas = metas.unique(false)
+                if (uniq_metas.size() > 1) {
+                    error("ERROR: Runs of sample '${id}' do not agree on single-end / paired-end (or control): ${uniq_metas}. Check the FastQ and BAM rows for this sample in the samplesheet.")
+                }
+                [ uniq_metas[0], bam.flatten() ]
         }
         .set { ch_sort_bam }
 

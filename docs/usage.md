@@ -44,7 +44,7 @@ If controls are to be used for peak calling use the parameter `--with_control`. 
 
 ### Full samplesheet
 
-The pipeline will auto-detect whether a sample is single- or paired-end using the information provided in the samplesheet. The samplesheet can have as many columns as you desire, however, there is a strict requirement for the first 4 columns to match those defined in the table below.
+The pipeline will auto-detect whether a sample is single- or paired-end using the information provided in the samplesheet. The samplesheet can have as many columns as you desire; the columns defined in the table below are matched by name, so their order does not matter.
 
 A final samplesheet file consisting of both single- and paired-end data may look something like the one below. This is for 7 samples, where we have biological triplicates for both the `CONTROL` and `TREATMENT` groups, and the third replicate in the `TREATMENT` group has been a technical replicate as a result of being sequenced twice.
 
@@ -65,10 +65,33 @@ TREATMENT,AEG588A6_S6_L004_R1_001.fastq.gz,,3,CONTROL,3
 | `fastq_1`           | Full path to FastQ file for Illumina short reads 1. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz".                                                             |
 | `fastq_2`           | Full path to FastQ file for Illumina short reads 2. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz".                                                             |
 | `replicate`         | Integer representing replicate number. This will be identical for re-sequenced libraries. Must start from `1..<number of replicates>`.                                                 |
+| `bam`               | Optional. Full path to an existing BAM file, used **instead of** `fastq_1`/`fastq_2` for that row. See [Starting from BAM files](#starting-from-bam-files).                        |
 | `control`           | Sample name for control sample.                                                                                                                                                        |
 | `control_replicate` | Integer representing replicate number of the control sample                                                                                                                            |
 
 Example sheets [without controls](../assets/samplesheet.csv) and [with controls](../assets/samplesheet_with_control.csv) have been provided with the pipeline.
+
+### Starting from BAM files
+
+Any row can start from an existing alignment instead of FastQ by filling the `bam` column and leaving `fastq_1`/`fastq_2` empty. FastQ and BAM rows can be mixed freely in one samplesheet, including as runs of the same sample and replicate, and the `fastq_1`/`fastq_2` columns can be left out entirely when every row is a BAM:
+
+```csv title="samplesheet.csv"
+sample,fastq_1,fastq_2,replicate,bam
+WT,s3://bucket/WT_REP1_R1.fastq.gz,s3://bucket/WT_REP1_R2.fastq.gz,1,
+WT,,,2,s3://bucket/WT_REP2.bam
+KO,,,1,s3://bucket/KO_REP1.bam
+KO,,,2,s3://bucket/KO_REP2.bam
+```
+
+For BAM rows the pipeline:
+
+1. **Checks the reference.** Every `@SQ` contig in the BAM header must be present in the genome given to this run (`--genome` / `--fasta`) with the same length. If not, the run stops with a list of the mismatched contigs. Contigs in the genome but missing from the BAM header only produce a warning. Unaligned BAMs (no `@SQ` lines) are rejected.
+2. **Detects single-end / paired-end** from the first 100,000 primary alignments (BAMs mixing paired and unpaired reads are rejected). All runs of one sample must agree.
+3. **Skips FastQC, trimming and alignment**, then coordinate-sorts and indexes the BAM and runs samtools stats/flagstat/idxstats so it enters the pipeline exactly where freshly aligned BAMs do: merging of runs, duplicate marking, filtering, peak calling and everything downstream.
+
+Existing duplicate flags are recomputed by Picard MarkDuplicates, and the BAM's own read groups are kept. The reference check summary for each BAM is written to `<aligner>/library/input_bam_check/`. If every row is a BAM, no aligner index is built.
+
+Because peaks and QC depend on the aligner used to create the BAM, check that the BAMs were produced with settings compatible with the rest of your data before comparing samples started from FastQ and from BAM.
 
 ## Reference genome files
 

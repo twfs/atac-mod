@@ -3,6 +3,17 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [2.1.2-bam-input] - fork of nf-core/atacseq 2.1.2
+
+### Enhancements
+
+- Samplesheet accepts an optional `bam` column so samples can start from an existing BAM instead of FastQ (mixed samplesheets supported).
+- New `BAM_INPUT_CHECK` module: validates BAM contigs against the run genome and detects single-/paired-end.
+- Samplesheet columns are matched by name; `fastq_1` may be omitted for BAM-only samplesheets.
+- Aligner index is not built when every sample starts from BAM.
+- Removed `.github/workflows` CI from this fork.
+
 ## [[2.1.2](https://github.com/nf-core/atacseq/releases/tag/2.1.2)] - 2022-08-07
 
 ### Enhancements & fixes
