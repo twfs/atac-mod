@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Enhancements
 
-- Samplesheet accepts an optional `bam` column so a run can start from existing BAMs instead of FastQ. A samplesheet must be all FastQ or all BAM; mixed samplesheets are rejected. Already-deduplicated/filtered BAMs are accepted; their QC reports 0% duplication (documented in `docs/usage.md`).
+- Samplesheet accepts an optional `bam` column so a run can start from existing BAMs instead of FastQ. A samplesheet must be all FastQ or all BAM; mixed samplesheets are rejected. Already-deduplicated/filtered BAMs are accepted; their QC reports 0% duplication (documented in `docs/usage.md`). The pipeline stops with an error if a sample/replicate mixes deduplicated and non-deduplicated BAMs (detected from the `@PG` header by `bin/bam_dedup_status.sh`, tested in `tests/test_bam_dedup_status.py`).
 - New `BAM_INPUT_CHECK` module: validates BAM contigs against the run genome and detects single-/paired-end.
 - Samplesheet columns are matched by name; `fastq_1` may be omitted for BAM-only samplesheets.
 - Aligner index is not built for BAM samplesheets.

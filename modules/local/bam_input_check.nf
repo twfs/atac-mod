@@ -12,7 +12,7 @@ process BAM_INPUT_CHECK {
     path  fai
 
     output:
-    tuple val(meta), path(bam), env('SINGLE_END'), emit: bam
+    tuple val(meta), path(bam), env('SINGLE_END'), env('DEDUPLICATED'), emit: bam
     path  "*.reference_check.txt"              , emit: report
     path  "versions.yml"                       , emit: versions
 
@@ -75,6 +75,16 @@ process BAM_INPUT_CHECK {
     fi
     echo -e "single_end\\t\$SINGLE_END" >> ${prefix}.reference_check.txt
 
+    ## 3. Have duplicates already been removed? (from the @PG history in the header)
+    ##    All runs of one sample/replicate must agree - checked in the workflow when runs are merged.
+    DEDUP_STATUS=\$(samtools view -H $bam | bam_dedup_status.sh)
+    DEDUPLICATED=\$(echo "\$DEDUP_STATUS" | cut -f1)
+    echo -e "duplicates_removed\\t\$DEDUPLICATED" >> ${prefix}.reference_check.txt
+    if [ "\$DEDUPLICATED" = "true" ]; then
+        echo -e "duplicates_removed_by\\t\$(echo "\$DEDUP_STATUS" | cut -f2-)" >> ${prefix}.reference_check.txt
+        echo "WARNING: BAM file '$bam' (sample ${meta.id}) has already had duplicates removed; its duplication QC will report 0%." >&2
+    fi
+
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//')
@@ -85,6 +95,7 @@ process BAM_INPUT_CHECK {
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
     SINGLE_END=false
+    DEDUPLICATED=false
     touch ${prefix}.reference_check.txt
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

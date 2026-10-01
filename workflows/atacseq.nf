@@ -276,8 +276,8 @@ workflow ATACSEQ {
             .out
             .bam
             .map {
-                meta, bam, single_end ->
-                    [ meta + [ single_end: single_end.trim().toBoolean() ], bam ]
+                meta, bam, single_end, deduplicated ->
+                    [ meta + [ single_end: single_end.trim().toBoolean(), deduplicated: deduplicated.trim().toBoolean() ], bam ]
             },
         PREPARE_GENOME.out.fasta
             .map {
@@ -291,21 +291,26 @@ workflow ATACSEQ {
     ch_versions = ch_versions.mix(INPUT_BAM_SORT_STATS_SAMTOOLS.out.versions)
 
     // Create channels: [ meta, [bam] ]
-    // Runs are merged per sample/replicate; they must agree on single-end / paired-end
+    // Runs are merged per sample/replicate; they must agree on single-end / paired-end, and input BAMs
+    // must agree on whether duplicates were already removed (mixing them breaks the merged duplication metrics)
     ch_genome_bam
         .map {
             meta, bam ->
                 def meta_clone = meta.clone()
                 meta_clone.remove('read_group')
+                def deduplicated = meta_clone.remove('deduplicated')
                 meta_clone.id = meta_clone.id - ~/_T\d+$/
-                [ meta_clone.id, meta_clone, bam ]
+                [ meta_clone.id, meta_clone, bam, deduplicated ]
         }
         .groupTuple(by: [0])
         .map {
-            id, metas, bam ->
+            id, metas, bam, deduplicated ->
                 def uniq_metas = metas.unique(false)
                 if (uniq_metas.size() > 1) {
                     error("ERROR: Runs of sample '${id}' do not agree on single-end / paired-end (or control): ${uniq_metas}. Check the rows for this sample in the samplesheet.")
+                }
+                if (deduplicated.findAll { d -> d != null }.unique(false).size() > 1) {
+                    error("ERROR: The BAM files for sample '${id}' are a mix of BAMs that have already had duplicates removed and BAMs that have not. Supply the same type of BAM (all deduplicated, or all before duplicate removal) for every run of a sample and replicate. See '${params.outdir}/${params.aligner}/library/input_bam_check/' for which BAMs were detected as deduplicated.")
                 }
                 [ uniq_metas[0], bam.flatten() ]
         }

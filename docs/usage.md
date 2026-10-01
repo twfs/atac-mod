@@ -87,7 +87,7 @@ BAMs can be raw aligner output, duplicate-marked, or already deduplicated and fi
 
 > **Note: QC for deduplicated or filtered BAMs.** QC metrics describe the BAM you supply, not the original sequencing library. If a BAM has already been deduplicated, Picard MarkDuplicates and MultiQC will report **0% duplication** (with no estimated library size), because there are no duplicates left in that BAM. Likewise, if the BAM was already filtered, read counts, mitochondrial read fraction and other alignment QC will reflect the filtered reads only. To see the true duplication rate and library complexity, supply BAMs from before duplicate removal.
 
-Use the same type of BAM (raw, or deduplicated) for all runs of a sample and replicate, and keep one sequencing run per BAM.
+Use the same type of BAM (all before duplicate removal, or all deduplicated) for every run of a sample and replicate, and keep one sequencing run per BAM. The pipeline reads each BAM's `@PG` header history to see whether duplicates were removed (Picard/GATK MarkDuplicates with duplicate removal, `samtools markdup -r`, `sambamba markdup -r`, `umi_tools dedup`, or `samtools view -F` excluding flag `0x400`). It stops with an error if one sample/replicate mixes the two types, because merging them gives misleading duplication metrics. The result is recorded as `duplicates_removed` in each BAM's summary in `<aligner>/library/input_bam_check/`. BAMs whose `@PG` history has been stripped are treated as not deduplicated.
 
 For BAM rows the pipeline:
 
