@@ -83,7 +83,11 @@ KO,1,s3://bucket/KO_REP1.bam
 KO,2,s3://bucket/KO_REP2.bam
 ```
 
-Supply BAMs **before duplicate removal** (raw aligner output or duplicate-marked BAMs). Already-deduplicated or filtered BAMs, such as the `*.clN.*` BAMs from a previous run of this pipeline, will under-report duplication. If you give several BAMs for the same sample and replicate, each should contain a single sequencing run.
+BAMs can be raw aligner output, duplicate-marked, or already deduplicated and filtered (for example the `*.clN.*` BAMs from a previous run of this pipeline). The pipeline marks and removes duplicates and filters reads again either way, so peaks and counts are unaffected.
+
+> **Note: QC for deduplicated or filtered BAMs.** QC metrics describe the BAM you supply, not the original sequencing library. If a BAM has already been deduplicated, Picard MarkDuplicates and MultiQC will report **0% duplication** (with no estimated library size), because there are no duplicates left in that BAM. Likewise, if the BAM was already filtered, read counts, mitochondrial read fraction and other alignment QC will reflect the filtered reads only. To see the true duplication rate and library complexity, supply BAMs from before duplicate removal.
+
+Use the same type of BAM (raw, or deduplicated) for all runs of a sample and replicate, and keep one sequencing run per BAM.
 
 For BAM rows the pipeline:
 
