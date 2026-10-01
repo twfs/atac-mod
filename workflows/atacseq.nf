@@ -19,7 +19,7 @@ WorkflowAtacseq.initialise(params, log)
 // Check mandatory parameters
 ch_input = file(params.input)
 
-// Does any sample start from FastQ? If every row provides a BAM, no aligner index is needed.
+// FastQ or BAM samplesheet? (mixing is rejected by SAMPLESHEET_CHECK). A BAM samplesheet needs no aligner index.
 def has_fastq_input = ch_input.splitCsv(header: true).any { row -> row.fastq_1?.trim() }
 
 // Check ataqv_mito_reference parameter
@@ -291,7 +291,7 @@ workflow ATACSEQ {
     ch_versions = ch_versions.mix(INPUT_BAM_SORT_STATS_SAMTOOLS.out.versions)
 
     // Create channels: [ meta, [bam] ]
-    // Runs from FastQ and from BAM are merged per sample/replicate; they must agree on single-end / paired-end
+    // Runs are merged per sample/replicate; they must agree on single-end / paired-end
     ch_genome_bam
         .map {
             meta, bam ->
@@ -305,7 +305,7 @@ workflow ATACSEQ {
             id, metas, bam ->
                 def uniq_metas = metas.unique(false)
                 if (uniq_metas.size() > 1) {
-                    error("ERROR: Runs of sample '${id}' do not agree on single-end / paired-end (or control): ${uniq_metas}. Check the FastQ and BAM rows for this sample in the samplesheet.")
+                    error("ERROR: Runs of sample '${id}' do not agree on single-end / paired-end (or control): ${uniq_metas}. Check the rows for this sample in the samplesheet.")
                 }
                 [ uniq_metas[0], bam.flatten() ]
         }

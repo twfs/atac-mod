@@ -46,14 +46,19 @@ def check_samplesheet(file_in, file_out, with_control=False):
     Check the samplesheet and write a normalised copy with one row per sequencing run.
 
     Columns are matched by name, so their order does not matter.
-    Each row starts from EITHER FastQ files OR an existing BAM file:
+    The whole samplesheet starts from EITHER FastQ files OR existing BAM files; the two cannot be mixed.
 
-    sample,fastq_1,fastq_2,replicate,bam
-    WT,s3://bucket/WT_R1_1.fastq.gz,s3://bucket/WT_R1_2.fastq.gz,1,
-    WT,,,2,s3://bucket/WT_REP2.bam
-    KO,s3://bucket/KO_R1.fastq.gz,,1,
+    FastQ samplesheet:
+    sample,fastq_1,fastq_2,replicate
+    WT,s3://bucket/WT_R1_1.fastq.gz,s3://bucket/WT_R1_2.fastq.gz,1
+    KO,s3://bucket/KO_R1_1.fastq.gz,s3://bucket/KO_R1_2.fastq.gz,1
 
-    - `fastq_2` and `bam` columns are optional. The `fastq_1` column may be omitted if every row uses `bam`.
+    BAM samplesheet:
+    sample,replicate,bam
+    WT,1,s3://bucket/WT_REP1.bam
+    KO,1,s3://bucket/KO_REP1.bam
+
+    - `fastq_2` and `bam` columns are optional. The `fastq_1` column may be omitted in a BAM samplesheet.
     - For BAM rows single-end / paired-end is detected from the BAM itself later in the pipeline,
       so it is written as an empty `single_end` value here.
     - With --with_control, `control` and `control_replicate` columns are required.
@@ -63,6 +68,7 @@ def check_samplesheet(file_in, file_out, with_control=False):
     """
 
     sample_mapping_dict = {}
+    input_type, first_line = None, ""
     with open(file_in, "r", encoding="utf-8-sig", newline="") as fin:
         reader = csv.reader(fin)
         try:
@@ -158,6 +164,19 @@ def check_samplesheet(file_in, file_out, with_control=False):
             else:
                 print_error("Invalid combination of columns provided!", "Line", line)
 
+            ## The whole samplesheet must start from the same input type: all FastQ or all BAM
+            row_type = "BAM" if bam else "FastQ"
+            if input_type is None:
+                input_type, first_line = row_type, line
+            elif row_type != input_type:
+                print(
+                    "ERROR: Please check samplesheet -> FastQ and BAM inputs cannot be mixed in one samplesheet. "
+                    "Provide either FastQ files for every row or a BAM file for every row, and run the other samples separately.\n"
+                    f"First row ({input_type}): '{first_line.strip()}'\n"
+                    f"Conflicting row ({row_type}): '{line.strip()}'"
+                )
+                sys.exit(1)
+
             ## Create sample mapping dictionary = {sample: {replicate: [[ fastq_1, fastq_2, replicate, single_end, control, bam, extras... ]]}}
             replicate = int(replicate)
             sample_info = sample_info + [row[x] for x in extra_cols]
@@ -192,7 +211,7 @@ def check_samplesheet(file_in, file_out, with_control=False):
                     )
 
                 ## Check that FastQ runs of a sample are of the same datatype i.e. single-end / paired-end.
-                ## BAM rows (single_end == "") are checked once the BAM has been inspected in the pipeline.
+                ## For BAM samplesheets (single_end == "") this is checked once the BAMs have been inspected in the pipeline.
                 datatypes = set(
                     x[3] for runs in sample_mapping_dict[sample].values() for x in runs if x[3] != ""
                 )

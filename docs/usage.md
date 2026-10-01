@@ -65,7 +65,7 @@ TREATMENT,AEG588A6_S6_L004_R1_001.fastq.gz,,3,CONTROL,3
 | `fastq_1`           | Full path to FastQ file for Illumina short reads 1. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz".                                                             |
 | `fastq_2`           | Full path to FastQ file for Illumina short reads 2. File has to be gzipped and have the extension ".fastq.gz" or ".fq.gz".                                                             |
 | `replicate`         | Integer representing replicate number. This will be identical for re-sequenced libraries. Must start from `1..<number of replicates>`.                                                 |
-| `bam`               | Optional. Full path to an existing BAM file, used **instead of** `fastq_1`/`fastq_2` for that row. See [Starting from BAM files](#starting-from-bam-files).                        |
+| `bam`               | Optional. Full path to an existing BAM file, used **instead of** `fastq_1`/`fastq_2`. A samplesheet must use BAMs for every row or FastQ for every row. See [Starting from BAM files](#starting-from-bam-files). |
 | `control`           | Sample name for control sample.                                                                                                                                                        |
 | `control_replicate` | Integer representing replicate number of the control sample                                                                                                                            |
 
@@ -73,15 +73,17 @@ Example sheets [without controls](../assets/samplesheet.csv) and [with controls]
 
 ### Starting from BAM files
 
-Any row can start from an existing alignment instead of FastQ by filling the `bam` column and leaving `fastq_1`/`fastq_2` empty. FastQ and BAM rows can be mixed freely in one samplesheet, including as runs of the same sample and replicate, and the `fastq_1`/`fastq_2` columns can be left out entirely when every row is a BAM:
+A run can start from existing alignments instead of FastQ by giving a `bam` column. **A samplesheet must be either all FastQ or all BAM** — FastQ and BAM rows cannot be mixed, and the run stops at the samplesheet check if they are. To analyse samples from both sources, run the pipeline separately for each. The `fastq_1`/`fastq_2` columns can be left out of a BAM samplesheet:
 
 ```csv title="samplesheet.csv"
-sample,fastq_1,fastq_2,replicate,bam
-WT,s3://bucket/WT_REP1_R1.fastq.gz,s3://bucket/WT_REP1_R2.fastq.gz,1,
-WT,,,2,s3://bucket/WT_REP2.bam
-KO,,,1,s3://bucket/KO_REP1.bam
-KO,,,2,s3://bucket/KO_REP2.bam
+sample,replicate,bam
+WT,1,s3://bucket/WT_REP1.bam
+WT,2,s3://bucket/WT_REP2.bam
+KO,1,s3://bucket/KO_REP1.bam
+KO,2,s3://bucket/KO_REP2.bam
 ```
+
+Supply BAMs **before duplicate removal** (raw aligner output or duplicate-marked BAMs). Already-deduplicated or filtered BAMs, such as the `*.clN.*` BAMs from a previous run of this pipeline, will under-report duplication. If you give several BAMs for the same sample and replicate, each should contain a single sequencing run.
 
 For BAM rows the pipeline:
 
@@ -91,7 +93,7 @@ For BAM rows the pipeline:
 
 Existing duplicate flags are recomputed by Picard MarkDuplicates, and the BAM's own read groups are kept. The reference check summary for each BAM is written to `<aligner>/library/input_bam_check/`. If every row is a BAM, no aligner index is built.
 
-Because peaks and QC depend on the aligner used to create the BAM, check that the BAMs were produced with settings compatible with the rest of your data before comparing samples started from FastQ and from BAM.
+Because peaks and QC depend on the aligner used to create the BAMs, use BAMs produced with consistent settings within one samplesheet, and take care when comparing results with runs started from FastQ.
 
 ## Reference genome files
 

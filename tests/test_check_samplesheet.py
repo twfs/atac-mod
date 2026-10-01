@@ -44,20 +44,33 @@ def test_bam_only_sheet_without_fastq_columns(tmp_path):
     ]
 
 
-def test_mixed_fastq_and_bam_including_same_replicate(tmp_path):
-    rows = run(tmp_path, f"sample,fastq_1,fastq_2,replicate,bam\nA,{PE1},{PE2},1,\nA,,,1,s3://b/a_run2.bam\nB,,,1,s3://b/b.bam\n")
-    assert [(r["sample"], bool(r["bam"])) for r in rows] == [("A_REP1_T1", False), ("A_REP1_T2", True), ("B_REP1_T1", True)]
+def test_bam_column_present_but_empty_is_fastq_sheet(tmp_path):
+    rows = run(tmp_path, f"sample,fastq_1,fastq_2,replicate,bam\nA,{PE1},{PE2},1,\nB,{PE1},{PE2},1,\n")
+    assert [r["bam"] for r in rows] == ["", ""]
+
+
+def test_multiple_bam_runs_per_replicate(tmp_path):
+    rows = run(tmp_path, "sample,replicate,bam\nA,1,s3://b/a_run1.bam\nA,1,s3://b/a_run2.bam\n")
+    assert [r["sample"] for r in rows] == ["A_REP1_T1", "A_REP1_T2"]
+
+
+def test_error_mixed_fastq_and_bam_same_replicate(tmp_path, capsys):
+    fails(tmp_path, f"sample,fastq_1,fastq_2,replicate,bam\nA,{PE1},{PE2},1,\nA,,,1,s3://b/a_run2.bam\n", "cannot be mixed", capsys)
+
+
+def test_error_mixed_fastq_and_bam_different_samples(tmp_path, capsys):
+    fails(tmp_path, f"sample,fastq_1,replicate,bam\nA,,1,s3://b/a.bam\nB,{SE},1,\n", "cannot be mixed", capsys)
 
 
 def test_column_order_does_not_matter(tmp_path):
-    rows = run(tmp_path, f"replicate,bam,sample,fastq_1\n1,,A,{SE}\n1,s3://b/b.bam,B,\n")
+    rows = run(tmp_path, "replicate,bam,sample\n1,s3://b/a.bam,A\n1,s3://b/b.bam,B\n")
     assert rows[0]["sample"] == "A_REP1_T1" and rows[1]["bam"] == "s3://b/b.bam"
 
 
 def test_bam_with_controls(tmp_path):
     rows = run(
         tmp_path,
-        f"sample,fastq_1,fastq_2,replicate,control,control_replicate,bam\nT,,,1,IN,1,s3://b/t.bam\nIN,{PE1},{PE2},1,,,\n",
+        f"sample,fastq_1,fastq_2,replicate,control,control_replicate,bam\nT,,,1,IN,1,s3://b/t.bam\nIN,,,1,,,s3://b/in.bam\n",
         with_control=True,
     )
     assert {r["sample"]: r["control"] for r in rows} == {"IN_REP1_T1": "", "T_REP1_T1": "IN_REP1"}
